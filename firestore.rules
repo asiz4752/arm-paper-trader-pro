@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// PAPER TRADER PRO – Firestore rules
+//
+// This app has no login screen, so data is scoped by the "Workspace ID" you
+// choose in Settings. Treat that ID like a password: use a long random string
+// (e.g. pt-9f3c1b7e-4a2d-...), NOT "default", once you leave the testing phase.
+//
+// Anyone who knows the project config AND the workspace ID can read/write that
+// workspace. If you sync API credentials (Settings -> "Also sync Upstox
+// credentials"), either keep the workspace ID secret or switch that off.
+// ---------------------------------------------------------------------------
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /workspaces/{workspaceId}/{document=**} {
+      allow read, write: if workspaceId.size() >= 12;   // blocks short/guessable IDs such as "default"
+    }
+  }
+}
+
+// For a quick first test only (REMOVE afterwards), you can use:
+//   match /{document=**} { allow read, write: if true; }
+//
+// Stricter option: enable Firebase Anonymous Auth, add sign-in to the app, and replace the rule with
+//   allow read, write: if request.auth != null && request.auth.uid == workspaceId;

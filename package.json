@@ -1,0 +1,11 @@
+{
+  "name": "paper-trader-pro",
+  "version": "1.0.0",
+  "description": "Paper trading web app for Indian markets (Upstox live feed + Firebase Firestore)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "npx serve .",
+    "test": "node tests/run-tests.mjs"
+  }
+}
