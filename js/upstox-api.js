@@ -248,19 +248,21 @@ export class LiveFeed {
    * @param {UpstoxClient} client
    * @param {{getKeys:()=>Map<string,number>, onPrices:(m:Map)=>void, onQuotes:(m:Map)=>void, onStatus:(s:object)=>void}} h
    */
-  constructor(client, sim, h) {
+  constructor(client, h) {
     this.client = client;
-    this.sim = sim;
     this.h = h;
     this.timer = null;
     this.busy = false;
     this.lastError = '';
+    this.generation = 0;
   }
 
   start() {
     this.stop();
+    const generation = ++this.generation;
     const loop = async () => {
       await this.poll();
+      if (generation !== this.generation) return;
       const ms = Math.max(1000, Number(this.client.getSettings().prefs.pollMs) || 2000);
       this.timer = setTimeout(loop, ms);
     };
@@ -268,6 +270,7 @@ export class LiveFeed {
   }
 
   stop() {
+    this.generation++;
     clearTimeout(this.timer);
     this.timer = null;
   }
@@ -276,46 +279,44 @@ export class LiveFeed {
     if (this.busy) return;
     this.busy = true;
     try {
+      if (this.client.getSettings().prefs.simMode) {
+        this.status('off', 'Live off');
+        return;
+      }
+      if (this.client.fallback) {
+        this.status('fallback', 'Live unavailable');
+        return;
+      }
+
       const wanted = this.h.getKeys(); // Map key -> seed price
       const prices = new Map();
       const quotes = new Map();
       const tickerKeys = TICKER_ITEMS.map((t) => t.key);
-      const simulated = [];
-      const live = [];
-      for (const [k, seed] of wanted) {
-        if (this.client.isSim || k.startsWith('SIM_')) simulated.push([k, seed]); else live.push(k);
-      }
-
-      const needSim = this.client.isSim || simulated.length;
-      if (needSim) this.sim.tick();
-      for (const [k, seed] of simulated) {
-        const p = this.sim.ltp(k, seed);
-        if (Number.isFinite(p)) prices.set(k, p);
-      }
-
-      if (this.client.isSim) {
-        tickerKeys.forEach((k) => quotes.set(k, this.sim.quote(k)));
-        this.status('sim', this.client.fallback ? 'Simulation (fallback)' : 'Simulation');
-      } else {
-        try {
-          const liveQuotes = await this.client.quotes(tickerKeys);
-          liveQuotes.forEach((v, k) => { quotes.set(k, v); prices.set(k, v.ltp); });
-          const rest = live.filter((k) => !liveQuotes.has(k));
-          if (rest.length) (await this.client.ltp(rest)).forEach((v, k) => prices.set(k, v));
-          this.lastError = '';
-          this.status('live', 'Live');
-        } catch (e) {
-          this.lastError = e.message;
-          const s = this.client.getSettings();
-          if (e.status === 401 && s.prefs.autoFallback) {
-            this.client.fallback = true;
-            this.h.onNotice?.('warn', `${e.message}. Switched to simulation mode.`);
-            this.status('sim', 'Simulation (fallback)');
-          } else {
-            this.status('error', e.message);
-          }
+      const live = [...wanted.keys()].filter((k) => !k.startsWith('SIM_'));
+      try {
+        const liveQuotes = await this.client.quotes(tickerKeys);
+        liveQuotes.forEach((v, k) => { quotes.set(k, v); prices.set(k, v.ltp); });
+        const rest = live.filter((k) => !liveQuotes.has(k));
+        if (rest.length) (await this.client.ltp(rest)).forEach((v, k) => prices.set(k, v));
+        this.lastError = '';
+        this.status('live', 'Live');
+      } catch (e) {
+        this.lastError = e.message;
+        const s = this.client.getSettings();
+        if (e.status === 401 && s.prefs.autoFallback) {
+          this.client.fallback = true;
+          this.h.onNotice?.('warn', `${e.message}. Live price updates have stopped.`);
+          this.status('fallback', 'Live unavailable');
+        } else {
+          this.status('error', e.message);
         }
       }
+
+      if (this.client.getSettings().prefs.simMode) {
+        this.status('off', 'Live off');
+        return;
+      }
+      if (this.client.fallback) return;
       if (prices.size) this.h.onPrices(prices);
       if (quotes.size) this.h.onQuotes(quotes);
     } finally {

@@ -1,7 +1,7 @@
-// Paper Trader Pro – application entry point.
+// ARM Paper Trader Pro – application entry point.
 
 import { $, $$, esc, fmtINR, fmtNum, fmtSignedINR, fmtDate, fmtDateTime, pnlClass, round2,
-  istParts, isMarketOpen, todayISO, toLocalInput, download, csvCell, debounce } from './utils.js';
+  istParts, isMarketOpen, todayISO, toLocalInput, download, csvCell, debounce, calendarDaysBetween } from './utils.js';
 import { TICKER_ITEMS, INDEX_META } from './constants.js';
 import { store, on, emit, setSetting, upsertTrade, removeTrade, connectCloud, saveSnapshot, cloud } from './store.js';
 import { Simulator, UpstoxClient, LiveFeed } from './upstox-api.js';
@@ -13,7 +13,18 @@ import { initOrderUI, modalKeys } from './order-ui.js';
 const sim = new Simulator();
 const client = new UpstoxClient(() => store.settings, sim);
 
-const view = { tab: 'intraday', sub: { intraday: 'open', delivery: 'open' }, filter: 'all' };
+const MAIN_TABS = ['intraday', 'delivery', 'analytics'];
+const LAST_TAB_KEY = 'ptp.lastTab.v1';
+function readLastTab() {
+  try {
+    const tab = localStorage.getItem(LAST_TAB_KEY);
+    return MAIN_TABS.includes(tab) ? tab : 'intraday';
+  } catch {
+    return 'intraday';
+  }
+}
+
+const view = { tab: readLastTab(), sub: { intraday: 'open', delivery: 'open' }, filter: 'all' };
 
 /* =====================================================================
  * Derived values
@@ -122,11 +133,11 @@ function updateTicker(quotes) {
 /* =====================================================================
  * Tables
  * ===================================================================== */
-const HEAD = (closed) => `
+const HEAD = (closed, includeHoldingDays = false) => `
   <thead><tr>
     <th>Symbol / Contract</th><th>Trade date</th><th>Qty</th><th>Buy / Entry price</th>
     <th>${closed ? 'Exit price' : 'Current price (LTP)'}</th><th>Gross P&amp;L</th><th>Brokerage &amp; taxes</th>
-    <th>Net P&amp;L</th><th class="act">Actions</th>
+    <th>Net P&amp;L</th>${includeHoldingDays ? '<th>Days Held</th>' : ''}<th class="act">Actions</th>
   </tr></thead>`;
 
 function chargesTitle(c) {
@@ -149,11 +160,13 @@ function symbolCell(t, journal) {
     <span class="sym-sub">${journal ? 'Delivery · ' : ''}${esc(t.instrumentKey)}${t.status === 'CLOSED' && t.exitReason ? ` <span class="badge reason ${esc(t.exitReason)}">${esc(t.exitReason)}</span>` : ''}</span>`;
 }
 
-function rowHtml(t, journal = false) {
+function rowHtml(t, journal = false, includeHoldingDays = false) {
   const p = pnlOf(t);
   const closed = t.status === 'CLOSED';
   const cls = pnlClass(p.net);
   const when = t.segment === 'delivery' ? fmtDate(t.entryTime) : fmtDateTime(t.entryTime);
+  const heldDays = includeHoldingDays ? calendarDaysBetween(t.entryTime, closed ? t.exitTime : new Date()) : null;
+  const hasMark = closed || store.prices.has(t.instrumentKey);
   const lots = t.lots ? `<span class="sym-sub">${t.lots} lot${t.lots > 1 ? 's' : ''} × ${t.lotSize || '?'}</span>` : '';
   const exitSub = closed ? `<span class="sym-sub">${fmtDateTime(t.exitTime)}</span>` : '';
   return `<tr data-id="${t.id}">
@@ -161,10 +174,11 @@ function rowHtml(t, journal = false) {
     <td class="num">${when}</td>
     <td class="num">${fmtNum(t.qty, 0)}${lots}</td>
     <td class="num"><span class="editable" data-edit="entry" title="Double-click to edit">${fmtNum(t.entryPrice)}</span></td>
-    <td class="num" data-f="ltp">${fmtNum(p.mark)}${exitSub}</td>
+    <td class="num" data-f="ltp">${hasMark ? fmtNum(p.mark) : '–'}${exitSub}</td>
     <td class="num ${pnlClass(p.gross)}" data-f="gross">${fmtSignedINR(p.gross)}</td>
     <td class="num"><span class="charges" data-f="charges" title="${esc(chargesTitle(p.charges))}">${fmtINR(p.charges.total.total)}</span></td>
     <td class="num ${cls}" data-f="net"><b>${fmtSignedINR(p.net)}</b></td>
+    ${includeHoldingDays ? `<td class="num" data-f="held-days">${heldDays ?? '–'}</td>` : ''}
     <td class="act"><span class="act-group">
       ${closed ? '' : '<button class="act-btn exit" data-act="exit">Exit</button>'}
       <button class="act-btn" data-act="edit">Edit</button>
@@ -175,8 +189,10 @@ function rowHtml(t, journal = false) {
 
 function footHtml(seg) {
   return `<tfoot><tr>
-    <td colspan="5">Total (${seg === 'intraday' ? 'open positions' : 'holdings'})</td>
-    <td class="num" data-f="t-gross">–</td><td class="num" data-f="t-charges">–</td><td class="num" data-f="t-net">–</td><td></td>
+    <td colspan="3">Total (${seg === 'intraday' ? 'open positions' : 'holdings'})</td>
+    <td class="num" data-f="t-entry-value">–</td><td class="num" data-f="t-current-value">–</td>
+    <td class="num" data-f="t-gross">–</td><td class="num" data-f="t-charges">–</td><td class="num" data-f="t-net">–</td>
+    ${seg === 'delivery' ? '<td class="num" data-f="t-held-days">–</td>' : ''}<td></td>
   </tr></tfoot>`;
 }
 
@@ -186,8 +202,10 @@ function renderSegmentTable(seg) {
   const list = (closed ? closedTrades(seg).sort(byExitDesc) : openTrades(seg).sort(byEntryDesc));
   const emptyMsg = closed ? 'No closed trades yet.' : seg === 'intraday' ? 'No open positions. Tap “+ New Trade” to place a paper options trade.' : 'No holdings. Tap “+ New Trade” and choose Delivery to buy shares.';
   table.dataset.mode = closed ? 'closed' : 'open';
-  table.innerHTML = HEAD(closed) +
-    `<tbody>${list.length ? list.map((t) => rowHtml(t)).join('') : `<tr><td colspan="9" class="empty">${emptyMsg}</td></tr>`}</tbody>` +
+  const includeHoldingDays = seg === 'delivery';
+  const colCount = includeHoldingDays ? 10 : 9;
+  table.innerHTML = HEAD(closed, includeHoldingDays) +
+    `<tbody>${list.length ? list.map((t) => rowHtml(t, false, includeHoldingDays)).join('') : `<tr><td colspan="${colCount}" class="empty">${emptyMsg}</td></tr>`}</tbody>` +
     (closed || !list.length ? '' : footHtml(seg));
   $$(`[data-count="${seg}-open"]`).forEach((e) => (e.textContent = openTrades(seg).length));
   $$(`[data-count="${seg}-closed"]`).forEach((e) => (e.textContent = closedTrades(seg).length));
@@ -197,10 +215,17 @@ function renderSegmentTable(seg) {
 function updateFooter(seg) {
   const table = $(`#table-${seg}`);
   if (table.dataset.mode !== 'open') return;
-  let g = 0, c = 0, n = 0;
+  let entryValue = 0, currentValue = 0, g = 0, c = 0, n = 0;
+  let hasAllCurrentPrices = true;
+  let heldDays = 0;
   openTrades(seg).forEach((t) => {
     const p = pnlOf(t);
     g += p.gross; c += p.charges.total.total; n += p.net;
+    entryValue += t.entryPrice * t.qty;
+    const mark = store.prices.get(t.instrumentKey);
+    if (Number.isFinite(mark)) currentValue += mark * t.qty;
+    else hasAllCurrentPrices = false;
+    if (seg === 'delivery') heldDays += calendarDaysBetween(t.entryTime, new Date()) ?? 0;
   });
   const set = (f, v, signed) => {
     const el = table.querySelector(`[data-f="${f}"]`);
@@ -208,7 +233,12 @@ function updateFooter(seg) {
     el.textContent = signed ? fmtSignedINR(v) : fmtINR(v);
     if (signed) el.className = 'num ' + pnlClass(v);
   };
+  set('t-entry-value', entryValue, false);
+  const currentValueCell = table.querySelector('[data-f="t-current-value"]');
+  if (currentValueCell) currentValueCell.textContent = hasAllCurrentPrices ? fmtINR(currentValue) : '–';
   set('t-gross', g, true); set('t-charges', c, false); set('t-net', n, true);
+  const daysCell = table.querySelector('[data-f="t-held-days"]');
+  if (daysCell) daysCell.textContent = fmtNum(heldDays, 0);
 }
 
 /** Cheap in-place refresh of live cells (keeps flash animations and open inputs intact). */
@@ -222,9 +252,11 @@ function updateLiveCells() {
       const p = pnlOf(t);
       const ltpEl = tr.querySelector('[data-f="ltp"]');
       const prev = Number(ltpEl.dataset.v);
-      ltpEl.textContent = fmtNum(p.mark);
-      if (prev && prev !== p.mark) flash(ltpEl, p.mark > prev);
-      ltpEl.dataset.v = p.mark;
+      const hasMark = t.status === 'CLOSED' || store.prices.has(t.instrumentKey);
+      ltpEl.textContent = hasMark ? fmtNum(p.mark) : '–';
+      if (hasMark && prev && prev !== p.mark) flash(ltpEl, p.mark > prev);
+      if (hasMark) ltpEl.dataset.v = p.mark;
+      else delete ltpEl.dataset.v;
       const gross = tr.querySelector('[data-f="gross"]');
       gross.textContent = fmtSignedINR(p.gross);
       gross.className = 'num ' + pnlClass(p.gross);
@@ -234,6 +266,11 @@ function updateLiveCells() {
       const net = tr.querySelector('[data-f="net"]');
       net.innerHTML = `<b>${fmtSignedINR(p.net)}</b>`;
       net.className = 'num ' + pnlClass(p.net);
+      if (seg === 'delivery') {
+        const heldDays = calendarDaysBetween(t.entryTime, t.status === 'CLOSED' ? t.exitTime : new Date());
+        const days = tr.querySelector('[data-f="held-days"]');
+        if (days) days.textContent = heldDays ?? '–';
+      }
     });
     updateFooter(seg);
   }
@@ -506,9 +543,11 @@ document.addEventListener('click', (e) => {
  * Tabs
  * ===================================================================== */
 function showTab(tab) {
+  if (!MAIN_TABS.includes(tab)) return;
   view.tab = tab;
+  try { localStorage.setItem(LAST_TAB_KEY, tab); } catch { /* storage unavailable */ }
   $$('#main-tabs .tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-  ['intraday', 'delivery', 'analytics'].forEach((t) => $('#panel-' + t).classList.toggle('hidden', t !== tab));
+  MAIN_TABS.forEach((t) => $('#panel-' + t).classList.toggle('hidden', t !== tab));
   renderAll();
 }
 
@@ -539,7 +578,7 @@ window.addEventListener('resize', debounce(() => view.tab === 'analytics' && ren
 /* =====================================================================
  * Price feed
  * ===================================================================== */
-const feed = new LiveFeed(client, sim, {
+const feed = new LiveFeed(client, {
   getKeys() {
     const keys = new Map();
     for (const t of store.trades) if (t.status === 'OPEN') keys.set(t.instrumentKey, t.entryPrice);
@@ -559,9 +598,10 @@ const feed = new LiveFeed(client, sim, {
   },
   onStatus({ mode, text, error }) {
     if (mode === 'live') setPill('pill-feed', 'ok', 'LIVE · Upstox', 'Live prices from Upstox. Click to refresh now.');
-    else if (mode === 'sim') setPill('pill-feed', 'warn', text === 'Simulation' ? 'SIMULATION' : 'SIM (fallback)', client.fallback ? 'Upstox token rejected – click to retry live data.' : 'Simulated prices – toggle SIM off to use Upstox.');
+    else if (mode === 'off') setPill('pill-feed', 'warn', 'LIVE OFF', 'Live price updates are off.');
+    else if (mode === 'fallback') setPill('pill-feed', 'bad', 'LIVE ERROR', 'Upstox token was rejected. Click to retry live data.');
     else setPill('pill-feed', 'bad', 'Data error', error || text);
-    $('#sim-toggle').checked = store.settings.prefs.simMode;
+    syncLiveToggle();
   },
   onNotice(type, msg) {
     toast(type, 'Upstox', msg, 7000);
@@ -570,17 +610,29 @@ const feed = new LiveFeed(client, sim, {
 
 on('poll-now', () => feed.poll());
 on('mode:changed', () => {
-  store.prices.clear();
-  $('#sim-toggle').checked = store.settings.prefs.simMode;
-  feed.poll();
+  syncLiveToggle();
+  if (store.settings.prefs.simMode) {
+    feed.stop();
+    feed.status('off', 'Live off');
+  } else {
+    feed.start();
+  }
   renderAll();
 });
 
-$('#sim-toggle').addEventListener('change', (e) => {
-  setSetting('prefs.simMode', e.target.checked);
+function syncLiveToggle() {
+  const live = !store.settings.prefs.simMode;
+  $('#live-toggle').checked = live;
+  $('#live-toggle-label').textContent = live ? 'LIVE ON' : 'LIVE OFF';
+}
+
+$('#live-toggle').addEventListener('change', (e) => {
+  const live = e.target.checked;
+  setSetting('prefs.simMode', !live);
   client.fallback = false;
+  syncLiveToggle();
   emit('mode:changed');
-  toast('info', e.target.checked ? 'Simulation mode on' : 'Live mode on', e.target.checked ? 'Prices are simulated.' : 'Using the Upstox access token from Settings.');
+  toast('info', live ? 'Live mode on' : 'Live mode off', live ? 'Using the Upstox access token from Settings.' : 'Live price updates are paused.');
 });
 
 $('#pill-feed').addEventListener('click', () => {
@@ -588,7 +640,6 @@ $('#pill-feed').addEventListener('click', () => {
     client.fallback = false;
     toast('info', 'Retrying live data…');
   }
-  store.prices.clear();
   feed.poll();
 });
 
@@ -639,9 +690,13 @@ function boot() {
   updateMarketPill();
   setInterval(updateMarketPill, 30_000);
   setInterval(maybeSnapshot, 30_000);
-  $('#sim-toggle').checked = store.settings.prefs.simMode;
-  renderAll();
-  feed.start();
+  syncLiveToggle();
+  showTab(view.tab);
+  if (store.settings.prefs.simMode) {
+    feed.status('off', 'Live off');
+  } else {
+    feed.start();
+  }
   connectCloud();
 }
 

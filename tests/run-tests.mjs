@@ -5,7 +5,7 @@ import { Simulator, simExpiries, simStrikes, blackScholes } from '../js/simulato
 import { parseFirebaseSnippet, isFirebaseConfigured } from '../js/firebase-config.js';
 import { UpstoxClient, LiveFeed } from '../js/upstox-api.js';
 import { DEFAULT_SETTINGS, TICKER_ITEMS } from '../js/constants.js';
-import { shortExpiry, fmtINR, fmtSignedINR, round2 } from '../js/utils.js';
+import { shortExpiry, fmtINR, fmtSignedINR, round2, calendarDaysBetween } from '../js/utils.js';
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -140,6 +140,13 @@ await test('utils formatting', () => {
   assert.equal(round2(1.005 + 1e-9), 1.01);
 });
 
+await test('calendar holding days count calendar dates and handle invalid dates', () => {
+  assert.equal(calendarDaysBetween('2026-11-25T10:00:00', '2026-11-25T23:00:00'), 0);
+  assert.equal(calendarDaysBetween('2026-11-25T15:00:00', '2026-11-27T09:00:00'), 2);
+  assert.equal(calendarDaysBetween('2026-11-27', '2026-11-25'), 0);
+  assert.equal(calendarDaysBetween('invalid', '2026-11-25'), null);
+});
+
 await test('UpstoxClient (sim mode) lookups', async () => {
   const settings = structuredClone(DEFAULT_SETTINGS); // simMode defaults to true
   const sim = new Simulator();
@@ -155,25 +162,51 @@ await test('UpstoxClient (sim mode) lookups', async () => {
   assert.ok((await client.strikes('BANKNIFTY', ex[0], 59000)).includes(59000));
 });
 
-await test('LiveFeed poll in sim mode delivers prices, quotes and status', async () => {
+await test('LiveFeed does not update dummy prices when live is off', async () => {
   const settings = structuredClone(DEFAULT_SETTINGS);
   const sim = new Simulator();
   const client = new UpstoxClient(() => settings, sim);
   const got = { prices: null, quotes: null, status: null };
-  const feed = new LiveFeed(client, sim, {
+  const feed = new LiveFeed(client, {
     getKeys: () => new Map([['SIM_EQ|INFY', 1500], ['NSE_FO|999', 42.5]]),
     onPrices: (m) => (got.prices = m),
     onQuotes: (m) => (got.quotes = m),
     onStatus: (s) => (got.status = s),
   });
   await feed.poll();
-  assert.ok(got.prices.get('SIM_EQ|INFY') > 0);
-  assert.ok(got.prices.get('NSE_FO|999') > 0);
-  assert.equal(got.quotes.size, TICKER_ITEMS.length);
-  assert.equal(got.status.mode, 'sim');
+  assert.equal(got.prices, null);
+  assert.equal(got.quotes, null);
+  assert.equal(got.status.mode, 'off');
 });
 
-await test('LiveFeed falls back to simulation on 401 when enabled', async () => {
+await test('LiveFeed only publishes live prices when live is on', async () => {
+  const settings = structuredClone(DEFAULT_SETTINGS);
+  settings.prefs.simMode = false;
+  const sim = new Simulator();
+  const client = new UpstoxClient(() => settings, sim);
+  const tickerKey = TICKER_ITEMS[0].key;
+  const equityKey = 'NSE_EQ|INE002A01018';
+  client.quotes = async () => new Map([[tickerKey, { ltp: 26000, change: 0, pct: 0 }]]);
+  client.ltp = async (keys) => {
+    assert.deepEqual(keys, [equityKey]);
+    return new Map([[equityKey, 1234]]);
+  };
+  const got = { prices: null, quotes: null, status: null };
+  const feed = new LiveFeed(client, {
+    getKeys: () => new Map([['SIM_EQ|INFY', 1500], [equityKey, 1200]]),
+    onPrices: (m) => (got.prices = m),
+    onQuotes: (m) => (got.quotes = m),
+    onStatus: (s) => (got.status = s),
+  });
+  await feed.poll();
+  assert.equal(got.prices.get(tickerKey), 26000);
+  assert.equal(got.prices.get(equityKey), 1234);
+  assert.equal(got.prices.has('SIM_EQ|INFY'), false);
+  assert.equal(got.quotes.get(tickerKey).ltp, 26000);
+  assert.equal(got.status.mode, 'live');
+});
+
+await test('LiveFeed stops price updates after 401 when auto-fallback is enabled', async () => {
   const settings = structuredClone(DEFAULT_SETTINGS);
   settings.prefs.simMode = false;
   settings.upstox.accessToken = 'expired';
@@ -182,9 +215,13 @@ await test('LiveFeed falls back to simulation on 401 when enabled', async () => 
   const realFetch = globalThis.fetch;
   globalThis.fetch = async () => ({ status: 401, ok: false, json: async () => ({}) });
   const notices = [];
-  const feed = new LiveFeed(client, sim, {
+  const got = { prices: null, quotes: null, status: null };
+  const feed = new LiveFeed(client, {
     getKeys: () => new Map(),
-    onPrices() {}, onQuotes() {}, onStatus() {}, onNotice: (t, m) => notices.push(m),
+    onPrices: (m) => (got.prices = m),
+    onQuotes: (m) => (got.quotes = m),
+    onStatus: (s) => (got.status = s),
+    onNotice: (t, m) => notices.push(m),
   });
   try {
     await feed.poll();
@@ -194,6 +231,9 @@ await test('LiveFeed falls back to simulation on 401 when enabled', async () => 
   assert.equal(client.fallback, true);
   assert.ok(client.isSim);
   assert.ok(notices[0].includes('expired'));
+  assert.equal(got.prices, null);
+  assert.equal(got.quotes, null);
+  assert.equal(got.status.mode, 'fallback');
 });
 
 await test('Upstox LTP response mapping', async () => {

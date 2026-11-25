@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Paper Trader Pro – Upstox + Firebase</title>
+  <title>ARM Paper Trader Pro – Upstox + Firebase</title>
   <meta name="theme-color" content="#0b0e14" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0e14'/%3E%3Cpath d='M10 44 L24 28 L34 36 L54 14' stroke='%2300c087' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
@@ -14,20 +14,20 @@
 <header class="topbar">
   <div class="brand">
     <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#161b26"/><path d="M10 44 L24 28 L34 36 L54 14" stroke="#00c087" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <span>Paper Trader <b>Pro</b></span>
+    <span>ARM Paper Trader <b>Pro</b></span>
   </div>
 
   <div class="top-pills">
     <span class="pill" id="pill-market" title="NSE/BSE session 09:15–15:30 IST, Mon–Fri"><i class="dot"></i><span>Market</span></span>
-    <button class="pill pill-btn" id="pill-feed" title="Click to retry live data / switch back from fallback"><i class="dot"></i><span>Data</span></button>
+    <button class="pill pill-btn" id="pill-feed" title="Live price feed status"><i class="dot"></i><span>Data</span></button>
     <span class="pill" id="pill-cloud" title="Firebase Firestore status"><i class="dot"></i><span>Cloud</span></span>
   </div>
 
   <div class="top-actions">
-    <label class="switch" title="Simulation mode: random-walk prices, works any time">
-      <input type="checkbox" id="sim-toggle" />
+    <label class="switch" title="Turn live Upstox prices on or off">
+      <input type="checkbox" id="live-toggle" />
       <span class="slider"></span>
-      <span class="switch-label">SIM</span>
+      <span class="switch-label" id="live-toggle-label">LIVE OFF</span>
     </label>
     <button class="icon-btn" id="btn-settings" aria-label="Settings" title="Settings">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -42,17 +42,17 @@
 
   <!-- ============ P&L SUMMARY ============ -->
   <section class="summary" id="summary">
-    <article class="card card-main">
+    <article class="card card-main summary-total">
       <div class="card-label">Overall Net P&amp;L <small>Intraday + Delivery, after all charges</small></div>
       <div class="card-value" id="sum-total">–</div>
       <div class="card-sub"><span>Realised <b id="sum-total-real">–</b></span><span>Unrealised <b id="sum-total-unreal">–</b></span></div>
     </article>
-    <article class="card">
+    <article class="card summary-intraday">
       <div class="card-label">Intraday Net P&amp;L <small>Index options</small></div>
       <div class="card-value" id="sum-intra">–</div>
       <div class="card-sub"><span>Available margin <b id="sum-intra-margin">–</b></span><span>Blocked <b id="sum-intra-blocked">–</b></span></div>
     </article>
-    <article class="card">
+    <article class="card summary-delivery">
       <div class="card-label">Delivery Net P&amp;L <small>Equity</small></div>
       <div class="card-value" id="sum-deliv">–</div>
       <div class="card-sub"><span>Invested <b id="sum-deliv-inv">–</b></span><span>Current value <b id="sum-deliv-cur">–</b></span></div>
@@ -330,7 +330,6 @@
 
       <fieldset>
         <legend>App behaviour</legend>
-        <label class="check"><input type="checkbox" data-setting="prefs.simMode" /> Simulation mode (no Upstox calls)</label>
         <label class="check"><input type="checkbox" data-setting="prefs.autoFallback" /> Auto-fallback to simulation if the token is rejected</label>
         <label class="check"><input type="checkbox" data-setting="prefs.sound" /> Sound alert on Target / SL hit</label>
         <label class="check"><input type="checkbox" data-setting="prefs.autoSquareOff" /> Auto square-off intraday positions at</label>

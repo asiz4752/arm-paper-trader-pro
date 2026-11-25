@@ -1,4 +1,4 @@
-# Paper Trader Pro
+# ARM Paper Trader Pro
 
 A paper-trading web app for Indian markets: **Intraday index options** (NIFTY, BANKNIFTY, SENSEX) and **Delivery equity**, with live prices from the **Upstox API** and cloud persistence in **Firebase Firestore**. No real orders are ever placed.
 
@@ -16,7 +16,7 @@ Pure static site (HTML + CSS + ES modules). No build step. Deploy on GitHub Page
 - **Target & Stop-loss automation** with toast and sound alert, plus optional intraday auto square-off
 - Journal & Analytics: win rate, average win vs loss, profit factor, expectancy, equity curve, CSV export
 - **Settings modal** with auto-save on every keystroke (localStorage plus Firestore sync)
-- **Simulation mode** so everything works with the market closed or an expired token
+- **LIVE ON/OFF** switch; market prices update only while live mode is on
 
 ## Quick start
 
@@ -27,14 +27,14 @@ cd paper-trader-pro
 npx serve .            # or: python3 -m http.server 8080
 ```
 
-Open the printed URL. The app starts in **Simulation mode**, so you can place and manage trades immediately.
+Open the printed URL. The app starts with **LIVE OFF** and does not generate dummy market-price updates. Turn live mode on to fetch prices from Upstox.
 
 ## 1. Firebase setup (cloud persistence)
 
 1. Go to the [Firebase console](https://console.firebase.google.com) and create a project.
 2. **Build, then Firestore Database, then Create database.** Pick a region near you.
 3. **Project settings, then Your apps, then Web app (`</>`)**, register an app and copy the `firebaseConfig` snippet.
-4. In Paper Trader Pro click the gear icon. Under **Firebase Firestore**, paste the whole snippet into the paste box. The fields fill themselves in. Or fill them one by one.
+4. In ARM Paper Trader Pro click the gear icon. Under **Firebase Firestore**, paste the whole snippet into the paste box. The fields fill themselves in. Or fill them one by one.
 5. Click **Verify Firebase connection**. The header pill should turn to "Cloud synced".
 6. **Security rules.** In the Firestore **Rules** tab, paste the contents of `firestore.rules`.
    - The app has no login. Data lives under `workspaces/{Workspace ID}/...`. A random Workspace ID is generated for you on first run (shown in Settings). It acts like a password, so keep it private.
@@ -59,9 +59,9 @@ Without Firebase the app works fully offline-first using `localStorage`.
    - **Manual:** open `https://api.upstox.com/v2/login/authorization/dialog?client_id=<API_KEY>&redirect_uri=<REDIRECT_URI>&response_type=code`, log in, copy the `code` from the redirected URL, and exchange it at `POST /v2/login/authorization/token`. Paste the returned `access_token` into Settings.
    - **In-app helper:** Settings, then Upstox API, then *Generate a token from the app*. It needs the CORS proxy below.
 3. Paste the token under **Settings, then Upstox API, then Access token**, then click **Test Upstox connection**.
-4. Turn the **SIM** switch in the header off. The pill should read **LIVE · Upstox**.
+4. Turn the **LIVE ON/OFF** switch in the header on. The pill should read **LIVE · Upstox**.
 
-Upstox access tokens expire daily at about 3:30 AM IST, so regenerate one each trading day. If the token is rejected the app drops to simulation automatically (you can disable this in Settings). Click the data pill to retry live.
+Upstox access tokens expire daily at about 3:30 AM IST, so regenerate one each trading day. If the token is rejected, live price updates stop and the data pill shows an error. Click the data pill to retry live.
 
 ### CORS and the optional proxy
 

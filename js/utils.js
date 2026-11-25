@@ -56,6 +56,15 @@ export const fmtDate = (iso) => {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
 };
 
+export const calendarDaysBetween = (start, end) => {
+  if (!start || !end) return null;
+  const from = new Date(start), to = new Date(end);
+  if (isNaN(from) || isNaN(to)) return null;
+  const fromDay = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const toDay = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.max(0, Math.floor((toDay - fromDay) / 86400000));
+};
+
 // "2026-12-02" -> "02DEC26"
 export const shortExpiry = (ymd) => {
   const [y, m, d] = String(ymd).split('-').map(Number);

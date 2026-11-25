@@ -79,19 +79,34 @@ input, select, textarea { font: inherit; color: var(--text); }
 .tick-val { font-family: var(--mono); font-weight: 600; font-size: 15px; }
 .tick-chg { font-family: var(--mono); font-size: 12px; }
 
-.container { max-width: 1280px; margin: 0 auto; padding: 18px; }
+.container { width: 100%; max-width: none; margin: 0; padding: 18px; }
 
 /* ---------- summary cards ---------- */
-.summary { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+.summary { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
 .card {
   background: linear-gradient(180deg, var(--card), var(--bg-2)); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 16px 18px;
+  border-radius: 12px; padding: 10px 16px;
 }
-.card-main { border-color: #2c3652; }
-.card-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
-.card-label small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; margin-top: 1px; opacity: .8; }
-.card-value { font-family: var(--mono); font-size: 30px; font-weight: 700; margin: 8px 0 6px; font-variant-numeric: tabular-nums; }
-.card-sub { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--muted); }
+.summary .card { border-left-width: 3px; }
+.summary-total {
+  border-color: #31518a; border-left-color: #5da2ff;
+  background: linear-gradient(115deg, rgba(76, 141, 255, .2), rgba(22, 27, 38, .96) 68%);
+}
+.summary-intraday {
+  border-color: #21634f; border-left-color: #00c087;
+  background: linear-gradient(115deg, rgba(0, 192, 135, .17), rgba(22, 27, 38, .96) 68%);
+}
+.summary-delivery {
+  border-color: #70512b; border-left-color: #f5b942;
+  background: linear-gradient(115deg, rgba(245, 185, 66, .16), rgba(22, 27, 38, .96) 68%);
+}
+.card-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+.summary-total .card-label { color: #8dbbff; }
+.summary-intraday .card-label { color: #68ddb8; }
+.summary-delivery .card-label { color: #f5c96f; }
+.card-label small { display: block; color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400; margin-top: 0; opacity: .85; }
+.card-value { font-family: var(--mono); font-size: 25px; font-weight: 700; margin: 3px 0 2px; font-variant-numeric: tabular-nums; }
+.card-sub { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 11px; color: var(--muted); }
 .card-sub b { color: var(--text); font-family: var(--mono); font-weight: 500; }
 
 /* ---------- tabs ---------- */
