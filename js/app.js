@@ -133,10 +133,12 @@ function updateTicker(quotes) {
 /* =====================================================================
  * Tables
  * ===================================================================== */
-const HEAD = (closed, includeHoldingDays = false) => `
+const HEAD = (closed, includeHoldingDays = false, includePriceChange = false) => `
   <thead><tr>
-    <th>Symbol / Contract</th><th>Trade date</th><th>Qty</th><th>Buy / Entry price</th>
-    <th>${closed ? 'Exit price' : 'Current price (LTP)'}</th><th>Gross P&amp;L</th><th>Brokerage &amp; taxes</th>
+    <th>Symbol / Contract</th><th>Trade date</th><th>Qty</th><th>Entry price</th>
+    <th>${closed ? 'Exit price' : 'Current price (LTP)'}</th>
+    ${includePriceChange ? `<th>Price change </th>` : ''}
+    <th>Gross P&amp;L</th><th>  Brokerage</th>
     <th>Net P&amp;L</th>${includeHoldingDays ? '<th>Days Held</th>' : ''}<th class="act">Actions</th>
   </tr></thead>`;
 
@@ -160,7 +162,7 @@ function symbolCell(t, journal) {
     <span class="sym-sub">${journal ? 'Delivery · ' : ''}${esc(t.instrumentKey)}${t.status === 'CLOSED' && t.exitReason ? ` <span class="badge reason ${esc(t.exitReason)}">${esc(t.exitReason)}</span>` : ''}</span>`;
 }
 
-function rowHtml(t, journal = false, includeHoldingDays = false) {
+function rowHtml(t, journal = false, includeHoldingDays = false, includePriceChange = false) {
   const p = pnlOf(t);
   const closed = t.status === 'CLOSED';
   const cls = pnlClass(p.net);
@@ -175,6 +177,7 @@ function rowHtml(t, journal = false, includeHoldingDays = false) {
     <td class="num">${fmtNum(t.qty, 0)}${lots}</td>
     <td class="num"><span class="editable" data-edit="entry" title="Double-click to edit">${fmtNum(t.entryPrice)}</span></td>
     <td class="num" data-f="ltp">${hasMark ? fmtNum(p.mark) : '–'}${exitSub}</td>
+    ${includePriceChange ? `<td class="num ${pnlClass(p.mark - t.entryPrice)}" data-f="price-change">${hasMark ? fmtSignedINR(p.mark - t.entryPrice) : '–'}</td>` : ''}
     <td class="num ${pnlClass(p.gross)}" data-f="gross">${fmtSignedINR(p.gross)}</td>
     <td class="num"><span class="charges" data-f="charges" title="${esc(chargesTitle(p.charges))}">${fmtINR(p.charges.total.total)}</span></td>
     <td class="num ${cls}" data-f="net"><b>${fmtSignedINR(p.net)}</b></td>
@@ -191,6 +194,7 @@ function footHtml(seg) {
   return `<tfoot><tr>
     <td colspan="3">Total (${seg === 'intraday' ? 'open positions' : 'holdings'})</td>
     <td class="num" data-f="t-entry-value">–</td><td class="num" data-f="t-current-value">–</td>
+    ${seg === 'intraday' ? '<td class="num">–</td>' : ''}
     <td class="num" data-f="t-gross">–</td><td class="num" data-f="t-charges">–</td><td class="num" data-f="t-net">–</td>
     ${seg === 'delivery' ? '<td class="num" data-f="t-held-days">–</td>' : ''}<td></td>
   </tr></tfoot>`;
@@ -203,9 +207,10 @@ function renderSegmentTable(seg) {
   const emptyMsg = closed ? 'No closed trades yet.' : seg === 'intraday' ? 'No open positions. Tap “+ New Trade” to place a paper options trade.' : 'No holdings. Tap “+ New Trade” and choose Delivery to buy shares.';
   table.dataset.mode = closed ? 'closed' : 'open';
   const includeHoldingDays = seg === 'delivery';
-  const colCount = includeHoldingDays ? 10 : 9;
-  table.innerHTML = HEAD(closed, includeHoldingDays) +
-    `<tbody>${list.length ? list.map((t) => rowHtml(t, false, includeHoldingDays)).join('') : `<tr><td colspan="${colCount}" class="empty">${emptyMsg}</td></tr>`}</tbody>` +
+  const includePriceChange = seg === 'intraday';
+  const colCount = 9 + Number(includeHoldingDays) + Number(includePriceChange);
+  table.innerHTML = HEAD(closed, includeHoldingDays, includePriceChange) +
+    `<tbody>${list.length ? list.map((t) => rowHtml(t, false, includeHoldingDays, includePriceChange)).join('') : `<tr><td colspan="${colCount}" class="empty">${emptyMsg}</td></tr>`}</tbody>` +
     (closed || !list.length ? '' : footHtml(seg));
   $$(`[data-count="${seg}-open"]`).forEach((e) => (e.textContent = openTrades(seg).length));
   $$(`[data-count="${seg}-closed"]`).forEach((e) => (e.textContent = closedTrades(seg).length));
@@ -257,6 +262,12 @@ function updateLiveCells() {
       if (hasMark && prev && prev !== p.mark) flash(ltpEl, p.mark > prev);
       if (hasMark) ltpEl.dataset.v = p.mark;
       else delete ltpEl.dataset.v;
+      const priceChange = tr.querySelector('[data-f="price-change"]');
+      if (priceChange) {
+        const change = p.mark - t.entryPrice;
+        priceChange.textContent = hasMark ? fmtSignedINR(change) : '–';
+        priceChange.className = 'num ' + (hasMark ? pnlClass(change) : '');
+      }
       const gross = tr.querySelector('[data-f="gross"]');
       gross.textContent = fmtSignedINR(p.gross);
       gross.className = 'num ' + pnlClass(p.gross);
