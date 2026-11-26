@@ -3,7 +3,7 @@
 import { $, $$, esc, fmtINR, fmtNum, fmtSignedINR, fmtDate, fmtDateTime, pnlClass, round2,
   istParts, isMarketOpen, todayISO, toLocalInput, download, csvCell, debounce, calendarDaysBetween } from './utils.js';
 import { TICKER_ITEMS, INDEX_META } from './constants.js';
-import { store, on, emit, setSetting, upsertTrade, removeTrade, connectCloud, saveSnapshot, cloud } from './store.js';
+import { store, on, emit, setSetting, setPrices, upsertTrade, removeTrade, connectCloud, saveSnapshot, cloud } from './store.js';
 import { Simulator, UpstoxClient, LiveFeed } from './upstox-api.js';
 import { tradePnl, marginRequired } from './brokerage-calc.js';
 import { initModals, openModal, closeModal, toast, beep } from './ui.js';
@@ -598,14 +598,14 @@ const feed = new LiveFeed(client, {
     return keys;
   },
   onPrices(map) {
-    map.forEach((v, k) => store.prices.set(k, v));
+    setPrices(map);
     emit('prices');
     updateLiveCells();
     updateSummary();
     runAutomation();
   },
   onQuotes(map) {
-    map.forEach((q, k) => store.prices.set(k, q.ltp));
+    setPrices(new Map([...map].map(([key, quote]) => [key, quote.ltp])));
     updateTicker(map);
   },
   onStatus({ mode, text, error }) {

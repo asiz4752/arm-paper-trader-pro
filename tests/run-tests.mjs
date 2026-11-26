@@ -152,6 +152,31 @@ await test('calendar holding days count calendar dates and handle invalid dates'
   assert.equal(calendarDaysBetween('invalid', '2026-11-25'), null);
 });
 
+await test('last received prices persist when live mode is turned off and across reloads', async () => {
+  const previousStorage = globalThis.localStorage;
+  const data = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => data.get(key) ?? null,
+    setItem: (key, value) => data.set(key, value),
+  };
+  try {
+    const first = await import('../js/store.js?price-cache-first');
+    first.store.settings.prefs.simMode = false;
+    first.setPrices(new Map([['NSE_EQ|RELIANCE', 1234.5], ['NSE_FO|123', 87.25]]));
+    first.store.settings.prefs.simMode = true;
+    assert.equal(first.store.prices.get('NSE_EQ|RELIANCE'), 1234.5);
+    const reloaded = await import('../js/store.js?price-cache-reloaded');
+    assert.equal(reloaded.store.prices.get('NSE_EQ|RELIANCE'), 1234.5);
+    assert.equal(reloaded.store.prices.get('NSE_FO|123'), 87.25);
+    reloaded.setPrices(new Map([['NSE_EQ|RELIANCE', Number.NaN], ['NSE_FO|123', -1]]));
+    assert.equal(reloaded.store.prices.get('NSE_EQ|RELIANCE'), 1234.5);
+    assert.equal(reloaded.store.prices.get('NSE_FO|123'), 87.25);
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  }
+});
+
 await test('UpstoxClient (sim mode) lookups', async () => {
   const settings = structuredClone(DEFAULT_SETTINGS); // simMode defaults to true
   const sim = new Simulator();

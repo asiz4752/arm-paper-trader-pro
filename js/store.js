@@ -6,6 +6,7 @@ import { deepMerge, setPath, debounce } from './utils.js';
 
 const LS_SETTINGS = 'ptp.settings.v1';
 const LS_TRADES = 'ptp.trades.v1';
+const LS_PRICES = 'ptp.prices.v1';
 
 /* ---------- tiny event bus ---------- */
 const listeners = {};
@@ -21,13 +22,17 @@ const readLS = (key, fallback) => {
 const writeLS = (key, val) => {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* quota / private mode */ }
 };
+const savedPrices = readLS(LS_PRICES, {});
+const cachedPrices = savedPrices && typeof savedPrices === 'object' && !Array.isArray(savedPrices)
+  ? Object.entries(savedPrices).filter(([, price]) => Number.isFinite(price) && price >= 0)
+  : [];
 
 export const cloud = new CloudDB();
 
 export const store = {
   settings: deepMerge(DEFAULT_SETTINGS, readLS(LS_SETTINGS, {})),
   trades: readLS(LS_TRADES, []),
-  prices: new Map(),          // instrument key -> last price
+  prices: new Map(cachedPrices),
   cloud: { status: 'off', text: 'Local only' },
 };
 
@@ -57,6 +62,17 @@ export function setSetting(path, value) {
 
 /* ---------- trades ---------- */
 const saveTradesLocal = () => writeLS(LS_TRADES, store.trades);
+const savePricesLocal = () => writeLS(LS_PRICES, Object.fromEntries(store.prices));
+
+export function setPrices(prices) {
+  let changed = false;
+  for (const [key, price] of prices) {
+    if (typeof key !== 'string' || !Number.isFinite(price) || price < 0) continue;
+    store.prices.set(key, price);
+    changed = true;
+  }
+  if (changed) savePricesLocal();
+}
 
 export async function upsertTrade(trade) {
   const i = store.trades.findIndex((t) => t.id === trade.id);
