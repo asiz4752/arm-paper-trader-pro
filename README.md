@@ -7,7 +7,7 @@ Pure static site (HTML + CSS + ES modules). No build step. Deploy on GitHub Page
 ## Features
 
 - Dark, responsive dashboard with a live ticker (NIFTY 50, BANK NIFTY, SENSEX, INDIA VIX)
-- Summary cards: combined net P&L, intraday (with available margin) and delivery (invested / current value)
+- Summary cards: combined final P&L, intraday (with available margin) and delivery (invested / current value)
 - Floating **+ New Trade** button with a smart order ticket
   - Delivery: symbol search, market or limit price, quantity, backdated buy date
   - Intraday options: index chips, expiry, strike (with ATM button), CE/PE, BUY/SELL, lots x lot size, market or limit, trade date/time
@@ -95,7 +95,7 @@ Based on Upstox's published rate card and the Budget 2026 STT change effective 1
 | Stamp duty | 0.015% on buy | 0.003% on buy |
 | GST | 18% on brokerage + exchange + SEBI | same |
 
-Net P&L = Gross P&L minus entry-leg charges minus exit-leg charges. For open positions the exit leg is estimated at the current LTP.
+Final P&L = Gross P&L minus entry-leg charges minus exit-leg charges. For open positions the exit leg is estimated at the current LTP.
 
 ## Things to know
 

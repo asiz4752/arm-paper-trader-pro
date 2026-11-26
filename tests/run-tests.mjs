@@ -1,6 +1,6 @@
 // Run with:  node tests/run-tests.mjs   (or: npm test)
 import assert from 'node:assert/strict';
-import { legCharges, tradePnl, grossPnl, marginRequired, previewCharges } from '../js/brokerage-calc.js';
+import { legCharges, tradePnl, grossPnl, marginRequired, previewCharges, intradayReferenceLevels } from '../js/brokerage-calc.js';
 import { Simulator, simExpiries, simStrikes, blackScholes } from '../js/simulator.js';
 import { parseFirebaseSnippet, isFirebaseConfigured } from '../js/firebase-config.js';
 import { UpstoxClient, LiveFeed } from '../js/upstox-api.js';
@@ -69,6 +69,11 @@ await test('short option P&L sign', () => {
   assert.ok(p.charges.entry.stt > 0 && p.charges.exit.stt === 0);
 });
 
+await test('intraday target and stop levels are entry-relative and side-aware', () => {
+  assert.deepEqual(intradayReferenceLevels({ side: 'BUY', entryPrice: 100 }), { target: 132, sl: 78 });
+  assert.deepEqual(intradayReferenceLevels({ side: 'SELL', entryPrice: 100 }), { target: 68, sl: 122 });
+});
+
 await test('closed trade ignores the live price', () => {
   const t = { segment: 'delivery', side: 'BUY', entryPrice: 100, qty: 10, status: 'CLOSED', exitPrice: 110 };
   assert.equal(tradePnl(t, 9999).gross, 100);
@@ -135,8 +140,8 @@ await test('firebase snippet parser', () => {
 
 await test('utils formatting', () => {
   assert.equal(shortExpiry('2026-12-01'), '01DEC26');
-  assert.equal(fmtINR(-1234567.5), '-₹12,34,567.50');
-  assert.equal(fmtSignedINR(250), '+₹250.00');
+  assert.equal(fmtINR(-1234567.5), '-12,34,567.50');
+  assert.equal(fmtSignedINR(250), '+250.00');
   assert.equal(round2(1.005 + 1e-9), 1.01);
 });
 

@@ -31,6 +31,7 @@ const view = { tab: readLastTab(), sub: { intraday: 'open', delivery: 'open' }, 
  * ===================================================================== */
 const livePrice = (t) => (t.status === 'CLOSED' ? t.exitPrice : store.prices.get(t.instrumentKey) ?? t.entryPrice);
 const pnlOf = (t) => tradePnl(t, livePrice(t));
+const fmtSignedNum = (n) => `${n > 0 ? '+' : n < 0 ? '-' : ''}${fmtNum(Math.abs(n))}`;
 const openTrades = (seg) => store.trades.filter((t) => t.segment === seg && t.status === 'OPEN');
 const closedTrades = (seg) => store.trades.filter((t) => (!seg || t.segment === seg) && t.status === 'CLOSED');
 const byEntryDesc = (a, b) => new Date(b.entryTime) - new Date(a.entryTime);
@@ -139,11 +140,11 @@ const HEAD = (closed, includeHoldingDays = false, includePriceChange = false) =>
     <th>${closed ? 'Exit price' : 'Current price (LTP)'}</th>
     ${includePriceChange ? `<th>Price change </th>` : ''}
     <th>Gross P&amp;L</th><th>  Brokerage</th>
-    <th>Net P&amp;L</th>${includeHoldingDays ? '<th>Days Held</th>' : ''}<th class="act">Actions</th>
+    <th>Final P&amp;L</th>${includeHoldingDays ? '<th>Days Held</th>' : ''}<th class="act">Actions</th>
   </tr></thead>`;
 
 function chargesTitle(c) {
-  const f = (n) => '₹' + fmtNum(n);
+  const f = (n) => fmtNum(n);
   const t = c.total;
   return [
     `Entry leg: ${f(c.entry.total)}   Exit leg: ${f(c.exit.total)}`,
@@ -177,7 +178,7 @@ function rowHtml(t, journal = false, includeHoldingDays = false, includePriceCha
     <td class="num">${fmtNum(t.qty, 0)}${lots}</td>
     <td class="num"><span class="editable" data-edit="entry" title="Double-click to edit">${fmtNum(t.entryPrice)}</span></td>
     <td class="num" data-f="ltp">${hasMark ? fmtNum(p.mark) : '–'}${exitSub}</td>
-    ${includePriceChange ? `<td class="num ${pnlClass(p.mark - t.entryPrice)}" data-f="price-change">${hasMark ? fmtSignedINR(p.mark - t.entryPrice) : '–'}</td>` : ''}
+    ${includePriceChange ? `<td class="num ${pnlClass(p.mark - t.entryPrice)}" data-f="price-change">${hasMark ? fmtSignedNum(p.mark - t.entryPrice) : '–'}</td>` : ''}
     <td class="num ${pnlClass(p.gross)}" data-f="gross">${fmtSignedINR(p.gross)}</td>
     <td class="num"><span class="charges" data-f="charges" title="${esc(chargesTitle(p.charges))}">${fmtINR(p.charges.total.total)}</span></td>
     <td class="num ${cls}" data-f="net"><b>${fmtSignedINR(p.net)}</b></td>
@@ -194,7 +195,7 @@ function footHtml(seg) {
   return `<tfoot><tr>
     <td colspan="3">Total (${seg === 'intraday' ? 'open positions' : 'holdings'})</td>
     <td class="num" data-f="t-entry-value">–</td><td class="num" data-f="t-current-value">–</td>
-    ${seg === 'intraday' ? '<td class="num">–</td>' : ''}
+    <td class="num">–</td>
     <td class="num" data-f="t-gross">–</td><td class="num" data-f="t-charges">–</td><td class="num" data-f="t-net">–</td>
     ${seg === 'delivery' ? '<td class="num" data-f="t-held-days">–</td>' : ''}<td></td>
   </tr></tfoot>`;
@@ -207,7 +208,7 @@ function renderSegmentTable(seg) {
   const emptyMsg = closed ? 'No closed trades yet.' : seg === 'intraday' ? 'No open positions. Tap “+ New Trade” to place a paper options trade.' : 'No holdings. Tap “+ New Trade” and choose Delivery to buy shares.';
   table.dataset.mode = closed ? 'closed' : 'open';
   const includeHoldingDays = seg === 'delivery';
-  const includePriceChange = seg === 'intraday';
+  const includePriceChange = seg === 'intraday' || seg === 'delivery';
   const colCount = 9 + Number(includeHoldingDays) + Number(includePriceChange);
   table.innerHTML = HEAD(closed, includeHoldingDays, includePriceChange) +
     `<tbody>${list.length ? list.map((t) => rowHtml(t, false, includeHoldingDays, includePriceChange)).join('') : `<tr><td colspan="${colCount}" class="empty">${emptyMsg}</td></tr>`}</tbody>` +
@@ -265,7 +266,7 @@ function updateLiveCells() {
       const priceChange = tr.querySelector('[data-f="price-change"]');
       if (priceChange) {
         const change = p.mark - t.entryPrice;
-        priceChange.textContent = hasMark ? fmtSignedINR(change) : '–';
+        priceChange.textContent = hasMark ? fmtSignedNum(change) : '–';
         priceChange.className = 'num ' + (hasMark ? pnlClass(change) : '');
       }
       const gross = tr.querySelector('[data-f="gross"]');
@@ -317,7 +318,7 @@ async function exitTrade(t, price, reason = 'MANUAL') {
 async function manualExit(t) {
   const has = store.prices.has(t.instrumentKey);
   const price = livePrice(t);
-  const msg = `Square off ${t.symbol} × ${t.qty} at ₹${fmtNum(price)}?` + (has ? '' : '\n\nNo live price received yet – the entry price will be used.');
+  const msg = `Square off ${t.symbol} × ${t.qty} at ${fmtNum(price)}?` + (has ? '' : '\n\nNo live price received yet – the entry price will be used.');
   if (!confirm(msg)) return;
   const { p } = await exitTrade(t, price, 'MANUAL');
   toast(p.net >= 0 ? 'success' : 'warn', 'Position closed', `${t.symbol}: net ${fmtSignedINR(p.net)}`);
@@ -435,7 +436,7 @@ async function runAutomation() {
     try {
       const { p } = await exitTrade(t, price, reason);
       const label = reason === 'TARGET' ? '🎯 Target hit' : reason === 'SL' ? '🛑 Stop-loss hit' : '⏰ Auto square-off';
-      toast(p.net >= 0 ? 'success' : 'error', label, `${t.symbol} closed @ ₹${fmtNum(price)} · net ${fmtSignedINR(p.net)}`, 8000);
+      toast(p.net >= 0 ? 'success' : 'error', label, `${t.symbol} closed @ ${fmtNum(price)} · net ${fmtSignedINR(p.net)}`, 8000);
       if (prefs.sound) beep(p.net >= 0 ? 'up' : 'down');
     } finally {
       firing.delete(t.id);
@@ -468,7 +469,7 @@ function renderAnalytics() {
   $('#an-stats').innerHTML = [
     stat('Total trades', list.length),
     stat('Win rate', list.length ? winRate.toFixed(1) + '%' : '–', winRate >= 50 ? 'pos' : list.length ? 'neg' : ''),
-    stat('Net P&L', fmtSignedINR(sum(nets)), pnlClass(sum(nets))),
+    stat('Final P&L', fmtSignedINR(sum(nets)), pnlClass(sum(nets))),
     stat('Avg profit (winners)', wins.length ? fmtSignedINR(avgWin) : '–', 'pos'),
     stat('Avg loss (losers)', losses.length ? fmtSignedINR(avgLoss) : '–', 'neg'),
     stat('Profit factor', pf === Infinity ? '∞' : list.length ? pf.toFixed(2) : '–'),
@@ -534,7 +535,7 @@ function exportCsv(which) {
   const list = closedTrades(which === 'all' ? null : which).sort((a, b) => new Date(a.exitTime) - new Date(b.exitTime));
   if (!list.length) return toast('warn', 'Nothing to export', 'There are no closed trades in this view yet.');
   const head = ['Segment', 'Symbol', 'Side', 'Qty', 'Entry time', 'Entry price', 'Exit time', 'Exit price', 'Exit reason',
-    'Gross P&L', 'Brokerage', 'STT', 'Exchange charges', 'SEBI fee', 'Stamp duty', 'GST', 'Total charges', 'Net P&L', 'Notes'];
+    'Gross P&L', 'Brokerage', 'STT', 'Exchange charges', 'SEBI fee', 'Stamp duty', 'GST', 'Total charges', 'Final P&L', 'Notes'];
   const rows = list.map((t) => {
     const p = tradePnl(t), c = p.charges.total;
     return [t.segment, t.symbol, t.side, t.qty, t.entryTime, t.entryPrice, t.exitTime, t.exitPrice, t.exitReason || '',

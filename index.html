@@ -43,17 +43,17 @@
   <!-- ============ P&L SUMMARY ============ -->
   <section class="summary" id="summary">
     <article class="card card-main summary-total">
-      <div class="card-label">Overall Net P&amp;L <small>Intraday + Delivery, after all charges</small></div>
+      <div class="card-label">Overall Final P&amp;L <small>Intraday + Delivery, after all charges</small></div>
       <div class="card-value" id="sum-total">–</div>
       <div class="card-sub"><span>Realised <b id="sum-total-real">–</b></span><span>Unrealised <b id="sum-total-unreal">–</b></span></div>
     </article>
     <article class="card summary-intraday">
-      <div class="card-label">Intraday Net P&amp;L <small>Index options</small></div>
+      <div class="card-label">Intraday Final P&amp;L <small>Index options</small></div>
       <div class="card-value" id="sum-intra">–</div>
       <div class="card-sub"><span>Available margin <b id="sum-intra-margin">–</b></span><span>Blocked <b id="sum-intra-blocked">–</b></span></div>
     </article>
     <article class="card summary-delivery">
-      <div class="card-label">Delivery Net P&amp;L <small>Equity</small></div>
+      <div class="card-label">Delivery Final P&amp;L <small>Equity</small></div>
       <div class="card-value" id="sum-deliv">–</div>
       <div class="card-sub"><span>Invested <b id="sum-deliv-inv">–</b></span><span>Current value <b id="sum-deliv-cur">–</b></span></div>
     </article>
@@ -149,7 +149,7 @@
         </div>
 
         <div class="row">
-          <label class="field"><span>Buy price (₹)</span><input id="d-price" type="number" step="0.05" min="0" readonly /></label>
+          <label class="field"><span>Buy price</span><input id="d-price" type="number" step="0.05" min="0" readonly /></label>
           <label class="field"><span>Quantity (shares)</span><input id="d-qty" type="number" min="1" step="1" value="1" /></label>
         </div>
         <div class="row">
@@ -210,7 +210,7 @@
         </div>
 
         <div class="row">
-          <label class="field"><span>Entry price (₹)</span><input id="i-price" type="number" step="0.05" min="0" readonly /></label>
+          <label class="field"><span>Entry price</span><input id="i-price" type="number" step="0.05" min="0" readonly /></label>
           <label class="field"><span>Lots</span><input id="i-lots" type="number" min="1" step="1" value="1" /></label>
         </div>
         <div class="row">
@@ -222,8 +222,8 @@
           <label class="field"><span>Instrument key <em>(auto, editable)</em></span><input id="i-key" placeholder="auto" /></label>
         </div>
         <div class="row">
-          <label class="field"><span>Target price <em>(optional)</em></span><input id="i-target" type="number" step="0.05" min="0" /></label>
-          <label class="field"><span>Stop-loss <em>(optional)</em></span><input id="i-sl" type="number" step="0.05" min="0" /></label>
+          <label class="field"><span>Target price <em id="i-target-offset">(entry +32 pts)</em></span><input id="i-target" type="number" step="0.05" min="0" /></label>
+          <label class="field"><span>Stop-loss <em id="i-sl-offset">(entry −22 pts)</em></span><input id="i-sl" type="number" step="0.05" min="0" /></label>
         </div>
       </div>
 
@@ -245,7 +245,7 @@
     <div class="modal-head"><h2 id="edit-title">Edit trade</h2><button class="icon-btn close" data-close aria-label="Close">✕</button></div>
     <form id="edit-form" autocomplete="off">
       <div class="row">
-        <label class="field"><span>Entry price (₹)</span><input id="e-entry" type="number" step="0.05" min="0" required /></label>
+        <label class="field"><span>Entry price</span><input id="e-entry" type="number" step="0.05" min="0" required /></label>
         <label class="field"><span>Quantity</span><input id="e-qty" type="number" step="1" min="1" required /></label>
       </div>
       <div class="row">
@@ -254,7 +254,7 @@
       </div>
       <div class="row">
         <label class="field"><span>Entry date &amp; time</span><input id="e-time" type="datetime-local" /></label>
-        <label class="field" id="e-exit-wrap"><span>Exit price (₹)</span><input id="e-exit" type="number" step="0.05" min="0" /></label>
+        <label class="field" id="e-exit-wrap"><span>Exit price</span><input id="e-exit" type="number" step="0.05" min="0" /></label>
       </div>
       <label class="field"><span>Journal notes</span><textarea id="e-notes" rows="3" placeholder="Why did you take this trade?"></textarea></label>
       <div class="modal-foot">
@@ -317,8 +317,8 @@
       <fieldset>
         <legend>Virtual capital</legend>
         <div class="row">
-          <label class="field"><span>Intraday wallet (₹)</span><input type="number" min="0" step="1000" data-setting="capital.intraday" /></label>
-          <label class="field"><span>Delivery wallet (₹)</span><input type="number" min="0" step="1000" data-setting="capital.delivery" /></label>
+          <label class="field"><span>Intraday wallet</span><input type="number" min="0" step="1000" data-setting="capital.intraday" /></label>
+          <label class="field"><span>Delivery wallet</span><input type="number" min="0" step="1000" data-setting="capital.delivery" /></label>
         </div>
         <label class="field"><span>Short-option margin <em>(% of strike × qty, approximation)</em></span><input type="number" min="1" max="100" step="0.5" data-setting="prefs.shortMarginPct" /></label>
         <div class="row three">

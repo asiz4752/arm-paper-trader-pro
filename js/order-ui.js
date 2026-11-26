@@ -3,7 +3,7 @@
 import { $, $$, fmtINR, fmtNum, round2, uid, toLocalInput, todayISO, shortExpiry, debounce, esc } from './utils.js';
 import { store, upsertTrade, on, emit } from './store.js';
 import { INDEX_META } from './constants.js';
-import { previewCharges, marginRequired } from './brokerage-calc.js';
+import { previewCharges, marginRequired, intradayReferenceLevels } from './brokerage-calc.js';
 import { openModal, closeModal, toast } from './ui.js';
 
 /** Keys the order ticket wants live prices for (merged into the feed's subscription list). */
@@ -19,6 +19,8 @@ export function initOrderUI({ client, getAvailable, onPlaced }) {
     d: { otype: 'MARKET', inst: null },
     i: { index: 'NIFTY', opt: 'CE', side: 'BUY', otype: 'MARKET', inst: null, token: 0 },
   };
+  let autoIntradayTarget = true;
+  let autoIntradayStop = true;
 
   const num = (sel) => {
     const v = $(sel).value;
@@ -47,6 +49,7 @@ export function initOrderUI({ client, getAvailable, onPlaced }) {
     } else {
       $('#i-ltp').textContent = txt;
       if (o.i.otype === 'MARKET') $('#i-price').value = Number.isFinite(ltp) ? ltp.toFixed(2) : '';
+      refreshIntradayLevels();
     }
     renderPreview();
   }
@@ -94,6 +97,16 @@ export function initOrderUI({ client, getAvailable, onPlaced }) {
         <tr><td>Funds required ${d.side === 'SELL' ? '(approx. margin)' : ''}</td><td style="color:${need > avail ? 'var(--red)' : 'inherit'}">${fmtINR(need)}</td></tr>
         <tr><td>Available ${d.segment}</td><td>${fmtINR(avail)}</td></tr>
       </table>`;
+  }
+
+  function refreshIntradayLevels() {
+    const entryPrice = num('#i-price');
+    const validEntry = Number.isFinite(entryPrice) && entryPrice > 0;
+    const levels = validEntry ? intradayReferenceLevels({ side: o.i.side, entryPrice }) : null;
+    if (autoIntradayTarget) $('#i-target').value = levels ? levels.target.toFixed(2) : '';
+    if (autoIntradayStop) $('#i-sl').value = levels ? levels.sl.toFixed(2) : '';
+    $('#i-target-offset').textContent = o.i.side === 'SELL' ? '(entry −32 pts)' : '(entry +32 pts)';
+    $('#i-sl-offset').textContent = o.i.side === 'SELL' ? '(entry +22 pts)' : '(entry −22 pts)';
   }
 
   /* ---------- segment switching ---------- */
@@ -263,6 +276,7 @@ export function initOrderUI({ client, getAvailable, onPlaced }) {
     o.i.side = b.dataset.side;
     setActive($('#i-side'), 'side', o.i.side);
     updateSubmitButton();
+    refreshIntradayLevels();
     renderPreview();
   });
   $('#i-otype').addEventListener('click', (e) => {
@@ -281,12 +295,20 @@ export function initOrderUI({ client, getAvailable, onPlaced }) {
     refreshPrices();
   });
   ['#i-lots', '#i-lotsize'].forEach((s) => $(s).addEventListener('input', syncQty));
-  ['#i-price', '#i-qty'].forEach((s) => $(s).addEventListener('input', renderPreview));
+  $('#i-price').addEventListener('input', () => {
+    refreshIntradayLevels();
+    renderPreview();
+  });
+  $('#i-qty').addEventListener('input', renderPreview);
+  $('#i-target').addEventListener('input', () => { autoIntradayTarget = false; });
+  $('#i-sl').addEventListener('input', () => { autoIntradayStop = false; });
 
   /* ---------- open / close ---------- */
   function open(seg = 'intraday') {
     err.textContent = '';
     form.reset();
+    autoIntradayTarget = true;
+    autoIntradayStop = true;
     o.d = { otype: 'MARKET', inst: null };
     o.i = { ...o.i, otype: 'MARKET', side: 'BUY', opt: 'CE', inst: null };
     setActive($('#d-otype'), 'otype', 'MARKET');
@@ -399,7 +421,7 @@ export function initOrderUI({ client, getAvailable, onPlaced }) {
       if (need > avail) throw new Error(`Insufficient virtual funds: need ${fmtINR(need)}, available ${fmtINR(avail)}. Adjust capital in Settings.`);
       await upsertTrade(t);
       closeModal(modal);
-      toast('success', `${t.side} order filled`, `${t.symbol} × ${t.qty} @ ₹${fmtNum(t.entryPrice)}`);
+      toast('success', `${t.side} order filled`, `${t.symbol} × ${t.qty} @ ${fmtNum(t.entryPrice)}`);
       onPlaced?.(t);
     } catch (ex) {
       err.textContent = ex.message;

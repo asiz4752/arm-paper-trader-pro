@@ -17,13 +17,13 @@ export const fmtNum = (n, d = 2) => {
 export const fmtINR = (n, d = 2) => {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return '–';
   const v = Number(n);
-  return (v < 0 ? '-' : '') + '₹' + fmtNum(Math.abs(v), d);
+  return (v < 0 ? '-' : '') + fmtNum(Math.abs(v), d);
 };
 export const fmtSignedINR = (n, d = 2) => {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return '–';
   const v = Number(n);
-  if (v === 0) return '₹' + fmtNum(0, d);
-  return (v < 0 ? '-' : '+') + '₹' + fmtNum(Math.abs(v), d);
+  if (v === 0) return fmtNum(0, d);
+  return (v < 0 ? '-' : '+') + fmtNum(Math.abs(v), d);
 };
 export const pnlClass = (n) => (n > 0.004 ? 'pos' : n < -0.004 ? 'neg' : 'flat');
 

@@ -85,6 +85,15 @@ export const grossPnl = (trade, price) => {
   return r2(diff * trade.qty);
 };
 
+export const intradayReferenceLevels = (trade) => {
+  const targetOffset = trade.side === 'SELL' ? -32 : 32;
+  const stopOffset = trade.side === 'SELL' ? 22 : -22;
+  return {
+    target: r2(Math.max(0, trade.entryPrice + targetOffset)),
+    sl: r2(Math.max(0, trade.entryPrice + stopOffset)),
+  };
+};
+
 /** Full P&L picture for a trade at `price` (ignored when the trade is closed). */
 export function tradePnl(trade, price) {
   const mark = trade.status === 'CLOSED' ? trade.exitPrice : price ?? trade.entryPrice;
